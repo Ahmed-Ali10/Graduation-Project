@@ -1,0 +1,305 @@
+#!/bin/bash
+
+# Garden Model in cairo university 
+# Latitude: 30° 01' 39.36" N  Longitude: 31° 12' 36.50" E
+# Entity Type Names Must Start With A Capital Letter
+# Follows schema.org  and Data Model Guidelines
+
+curl -iX POST \
+  --url 'http://localhost:1026/v2/op/update' \
+  --header 'Content-Type: application/json' \
+  --data '{
+  "actionType":"append",
+  "entities":[
+    {
+    "id": "urn:ngsi-ld:Garden:001",
+    "type": "Garden",
+    "address":{
+      "type":"property",
+      "value":{
+      "addressLocality": "Giza",
+      "addressCountry" : "EG",
+      "streetAddress": "1 Gamaa"
+      }
+    },
+    "location": {
+        "type": "geo:json",
+        "value": {
+            "type": "Point",
+            "coordinates": [39.36, 36.50]
+        }
+    },
+    "name": {
+        "type": "Text",
+        "value": "Our Garden"
+    }
+    }
+  ]
+}'
+
+
+# Provisioning A Service Groups
+# api key is for authentication
+
+curl -iX POST \
+  'http://localhost:4041/iot/services' \
+  -H 'Content-Type: application/json' \
+  -H 'fiware-service: openiot' \
+  -H 'fiware-servicepath: /' \
+  -d '{
+  "services": [
+    {
+     "apikey":      "a1cc95dd-1b0c-41a9-83aa-f2239a3e22e5",  
+     "cbroker":     "http://localhost:1026",
+     "entity_type": "Thing",
+     "resource":    "/iot/json"
+   }
+ ]
+}'
+
+# # Adding devices 
+
+curl -iX POST \
+  'http://localhost:4041/iot/devices' \
+  -H 'Content-Type: application/json' \
+  -H 'fiware-service: openiot' \
+  -H 'fiware-servicepath: /' \
+  -d '{
+    "devices": [
+      {
+        "device_id":   "soilmoisture001",
+        "entity_name": "urn:ngsi-ld:SoilMoisture:001",
+        "entity_type": "SoilMoisture",
+        "attributes": [
+        {"object_id": "sm", "name": "soilmoisture", "type": "Integer" }
+        ],
+        "static_attributes": [
+        { "name":"refGarden", "type": "Relationship", "value": "urn:ngsi-ld:Garden:001"}
+        ]
+      },
+      {
+        "device_id":   "temperature001",
+        "entity_name": "urn:ngsi-ld:Temperature:001",
+        "entity_type": "Temperature",
+        "attributes": [
+        {"object_id": "t", "name": "temperature", "type": "Integer" }
+        ],
+        "static_attributes": [
+        { "name":"refGarden", "type": "Relationship", "value": "urn:ngsi-ld:Garden:001"}
+        ]
+      },
+      {
+        "device_id":   "humidity001",
+        "entity_name": "urn:ngsi-ld:Humidity:001",
+        "entity_type": "Humidity",
+        "attributes": [
+        {"object_id": "h", "name": "humidity", "type": "Integer" }
+        ],
+        "static_attributes": [
+        { "name":"refGarden", "type": "Relationship", "value": "urn:ngsi-ld:Garden:001"}
+        ]
+      }
+      ,
+      {
+        "device_id":   "pump001",
+        "entity_name": "urn:ngsi-ld:Pump:001",
+        "entity_type": "Pump",
+        "transport": "HTTP",
+        "endpoint": "http://192.168.1.100:8080/pump",
+        "commands": [
+        {"name": "on","type": "command"},
+        {"name": "off","type": "command"}
+        ],
+        "attributes": [
+        {"object_id": "s", "name": "state", "type":"Text"},
+        {"object_id": "th", "name": "threshold", "type":"Integer"}
+        ],
+        "static_attributes": [
+        { "name":"refGarden", "type": "Relationship", "value": "urn:ngsi-ld:Garden:001"}
+        ]
+      }
+    ]
+    
+  }'
+
+# pump endpoint : "http://localhost:5000/"
+
+# sending measurments to iot agent 
+  
+#soilmoisture001
+
+curl -iX POST \
+  'http://localhost:7896/iot/json?k=a1cc95dd-1b0c-41a9-83aa-f2239a3e22e5&i=soilmoisture001' \
+  -H 'Content-Type: application/json' \
+  -d '{"sm": "70"}'   
+
+
+# #temperature001
+curl -iX POST \
+  'http://localhost:7896/iot/json?k=a1cc95dd-1b0c-41a9-83aa-f2239a3e22e5&i=temperature001' \
+  -H 'Content-Type: application/json' \
+  -d '{"t": "10"}' 
+
+# ## humidity001
+curl -iX POST \
+  'http://localhost:7896/iot/json?k=a1cc95dd-1b0c-41a9-83aa-f2239a3e22e5&i=humidity001' \
+  -H 'Content-Type: application/json' \
+  -d '{"h": "40"}' 
+
+# ## pump001 state
+curl -iX POST \
+  'http://localhost:7896/iot/json?k=a1cc95dd-1b0c-41a9-83aa-f2239a3e22e5&i=pump001' \
+  -H 'Content-Type: application/json' \
+  -d '{"s": "off"}' 
+
+
+
+
+
+
+
+# QuantumLeap 
+
+curl -iX POST \
+  'http://localhost:1026/v2/subscriptions/' \
+  -H 'Content-Type: application/json' \
+  -H 'fiware-service: openiot' \
+  -H 'fiware-servicepath: /' \
+  -d '{
+  "description": "Notify QuantumLeap of count changes of any soilmoisture Sensor",
+  "subject": {
+    "entities": [
+      {
+        "idPattern": "SoilMoisture.*"
+      }
+    ],
+    "condition": {
+      "attrs": [
+        "soilmoisture"
+      ]
+    }
+  },
+  "notification": {
+    "http": {
+      "url": "http://quantumleap:8668/v2/notify"
+    },
+    "attrs": [
+      "soilmoisture"
+    ],
+    "metadata": ["dateCreated", "dateModified"]
+  },
+  "throttling": 1
+}'
+
+# Subscription for Temperature Sensor
+curl -iX POST \
+  'http://localhost:1026/v2/subscriptions/' \
+  -H 'Content-Type: application/json' \
+  -H 'fiware-service: openiot' \
+  -H 'fiware-servicepath: /' \
+  -d '{
+  "description": "Notify QuantumLeap of count changes of any Temperature Sensor",
+  "subject": {
+    "entities": [
+      {
+        "idPattern": "Temperature.*"
+      }
+    ],
+    "condition": {
+      "attrs": [
+        "temperature"
+      ]
+    }
+  },
+  "notification": {
+    "http": {
+      "url": "http://quantumleap:8668/v2/notify"
+    },
+    "attrs": [
+      "temperature"
+    ],
+    "metadata": ["dateCreated", "dateModified"]
+  },
+  "throttling": 1
+}'
+
+# Subscription for Humidity Sensor
+curl -iX POST \
+  'http://localhost:1026/v2/subscriptions/' \
+  -H 'Content-Type: application/json' \
+  -H 'fiware-service: openiot' \
+  -H 'fiware-servicepath: /' \
+  -d '{
+  "description": "Notify QuantumLeap of count changes of any Humidity Sensor",
+  "subject": {
+    "entities": [
+      {
+        "idPattern": "Humidity.*"
+      }
+    ],
+    "condition": {
+      "attrs": [
+        "humidity"
+      ]
+    }
+  },
+  "notification": {
+    "http": {
+      "url": "http://quantumleap:8668/v2/notify"
+    },
+    "attrs": [
+      "humidity"
+    ],
+    "metadata": ["dateCreated", "dateModified"]
+  },
+  "throttling": 1
+}'
+
+# Subscription for Pump
+curl -iX POST \
+  'http://localhost:1026/v2/subscriptions/' \
+  -H 'Content-Type: application/json' \
+  -H 'fiware-service: openiot' \
+  -H 'fiware-servicepath: /' \
+  -d '{
+  "description": "Notify QuantumLeap of count changes of the Pump",
+  "subject": {
+    "entities": [
+      {
+        "idPattern": "Pump.*"
+      }
+    ],
+    "condition": {
+      "attrs": [
+        "state"
+      ]
+    }
+  },
+  "notification": {
+    "http": {
+      "url": "http://quantumleap:8668/v2/notify"
+    },
+    "attrs": [
+      "state"
+    ],
+    "metadata": ["dateCreated", "dateModified"]
+  },
+  "throttling": 1
+}'
+
+# orion health check
+
+# curl -X GET \
+#   'http://localhost:1026/version'
+
+# # iot-agent health check
+
+# curl -X GET \
+#   'http://localhost:4041/iot/about'
+
+# # Checking Subscriptions For QuantumLeap
+
+# curl -X GET \
+#   'http://localhost:1026/v2/subscriptions/' \
+#   -H 'fiware-service: openiot' \
+#   -H 'fiware-servicepath: /'
